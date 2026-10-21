@@ -1,0 +1,30 @@
+[theme]
+base = "light"
+primaryColor = "#167d8d"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f5f7fa"
+textColor = "#142b40"
+font = "Roboto"
+
+[[theme.fontFaces]]
+family = "Roboto"
+url = "app/static/fonts/Roboto-Regular.ttf"
+weight = 400
+
+[[theme.fontFaces]]
+family = "Roboto"
+url = "app/static/fonts/Roboto-Medium.ttf"
+weight = 500
+
+[[theme.fontFaces]]
+family = "Roboto"
+url = "app/static/fonts/Roboto-Bold.ttf"
+weight = 700
+
+[server]
+headless = true
+maxUploadSize = 25
+enableStaticServing = true
+
+[browser]
+gatherUsageStats = false
