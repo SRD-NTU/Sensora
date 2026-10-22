@@ -47,14 +47,18 @@ CSS = """
 section[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl'],
 [data-testid='stExpandSidebarButton'],[data-testid='stSidebarCollapseButton'],
 [data-testid='stSidebarNav']{display:none!important}
-[data-testid='stTopNav']{position:absolute;left:50%;transform:translateX(-50%);display:flex;
-  justify-content:center;align-items:center}
+@media (min-width:769px){
+  [data-testid='stTopNav']{position:absolute;left:50%;transform:translateX(-50%);display:flex;
+    justify-content:center;align-items:center}
+}
 [data-testid='stHorizontalBlock']:has([data-testid='stExpander']){align-items:stretch}
 [data-testid='stHorizontalBlock']:has([data-testid='stExpander']) [data-testid='stColumn'],
 [data-testid='stHorizontalBlock']:has([data-testid='stExpander']) [data-testid='stColumn']>[data-testid='stVerticalBlock'],
 [data-testid='stHorizontalBlock']:has([data-testid='stExpander']) [data-testid='stElementContainer'],
 [data-testid='stHorizontalBlock']:has([data-testid='stExpander']) [data-testid='stExpander'],
 [data-testid='stHorizontalBlock']:has([data-testid='stExpander']) [data-testid='stExpander'] details{height:100%}
+.st-key-mobile_nav{display:none}
+@media (max-width:768px){.st-key-mobile_nav{display:block}}
 h1{letter-spacing:-.035em;margin-bottom:0}
 .sf-tag{color:#52606d;margin:.1rem 0 1.2rem;font-size:1.02rem}
 .sf-hero{background:linear-gradient(120deg,#0f2a43 0%,#167d8d 100%);color:#fff;border-radius:16px;
@@ -512,4 +516,9 @@ def run() -> None:
         st.Page(lambda: materials_page(database), title="Database", url_path="database"),
         st.Page(lambda: assistant_page(database), title="AI Assistant", url_path="assistant"),
     ]
-    st.navigation(pages, position="top").run()
+    current = st.navigation(pages, position="top")
+    # The top nav is not shown on narrow screens, so offer the same links there.
+    with st.container(key="mobile_nav"):
+        for column, page in zip(st.columns(len(pages)), pages):
+            column.page_link(page)
+    current.run()
