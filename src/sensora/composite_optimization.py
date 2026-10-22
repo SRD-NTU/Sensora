@@ -9,9 +9,12 @@ import pandas as pd
 
 from .composite_physics import (
     Targets,
+    bruggeman_permittivity,
+    lewis_nielsen_modulus,
     maxwell_garnett_multiphase,
     mori_tanaka_elasticity,
     planar_capacitance_response,
+    self_consistent_elasticity,
 )
 from .database import MaterialDatabase
 
@@ -28,6 +31,8 @@ class GeneticOptimizationSettings:
     mutation_probability: float = 0.30
     loading_step_vol_percent: float = 0.1
     maximum_total_filler_vol_percent: float = 4.9
+    minimum_total_filler_vol_percent: float = 0.0
+    loading_regime: str = "dilute"
     minimum_active_fillers: int = 1
     maximum_active_fillers: int = 4
     minimum_active_matrices: int = 1
@@ -46,8 +51,16 @@ class GeneticOptimizationSettings:
             raise ValueError("Matrix count limits must satisfy 1 <= minimum <= maximum.")
         if not 0 < self.loading_step_vol_percent < 5:
             raise ValueError("The loading step must lie between zero and 5 vol%.")
-        if not 0 < self.maximum_total_filler_vol_percent < 5:
-            raise ValueError("Total filler must remain below 5 vol%.")
+        if self.loading_regime == "dilute":
+            if not 0 < self.maximum_total_filler_vol_percent < 5:
+                raise ValueError("Total filler must remain below 5 vol% in the dilute regime.")
+            if self.minimum_total_filler_vol_percent != 0:
+                raise ValueError("The dilute regime has no minimum total filler.")
+        elif self.loading_regime == "concentrated":
+            if not 5 <= self.minimum_total_filler_vol_percent <= self.maximum_total_filler_vol_percent <= 20:
+                raise ValueError("The concentrated regime needs 5 <= minimum <= maximum <= 20 vol% total filler.")
+        else:
+            raise ValueError("Loading regime must be 'dilute' or 'concentrated'.")
 
 
 @dataclass(frozen=True)
@@ -68,6 +81,7 @@ class _Limits:
     min_fillers: int
     max_fillers: int
     maximum_units: int
+    minimum_units: int = 0
 
 
 def _number(row: dict, key: str) -> float:
@@ -95,7 +109,7 @@ def _random_genome(rng: np.random.Generator, limits: _Limits) -> tuple[int, ...]
 
     active = int(rng.integers(limits.min_fillers, limits.max_fillers + 1))
     filler_indices = rng.choice(limits.fillers, size=active, replace=False)
-    total = int(rng.integers(active, limits.maximum_units + 1))
+    total = int(rng.integers(max(active, limits.minimum_units), limits.maximum_units + 1))
     loads = np.ones(active, dtype=int)
     if total > active:
         loads += rng.multinomial(total - active, np.full(active, 1 / active))
@@ -139,6 +153,8 @@ def _repair_fillers(block: np.ndarray, limits: _Limits) -> np.ndarray:
         loads[0] = 1
     while np.count_nonzero(loads) < limits.min_fillers:
         loads[int(np.flatnonzero(loads == 0)[0])] = 1
+    while loads.sum() < limits.minimum_units:
+        loads[int(np.argmax(loads))] += 1
     while loads.sum() > limits.maximum_units:
         loads[int(np.argmax(loads))] -= 1
     return loads
@@ -217,12 +233,32 @@ def _blend_matrix(rows: list[dict], weights: np.ndarray) -> dict:
     )
 
 
+def _effective_permittivity(regime: str, matrix_eps, filler_eps, fractions) -> float:
+    """Maxwell-Garnett when dilute (below 5 vol%); Bruggeman effective medium when concentrated."""
+    rule = bruggeman_permittivity if regime == "concentrated" else maxwell_garnett_multiphase
+    return rule(matrix_eps, filler_eps, fractions)
+
+
+def _effective_elasticity(
+    regime: str, matrix_e, matrix_nu, filler_e, filler_nu, fractions, *, poisson: bool = True
+) -> tuple[float, float]:
+    """Mori-Tanaka when dilute; Lewis-Nielsen modulus with self-consistent Poisson ratio when concentrated."""
+    if regime != "concentrated":
+        return mori_tanaka_elasticity(matrix_e, matrix_nu, filler_e, filler_nu, fractions)
+    modulus = lewis_nielsen_modulus(matrix_e, matrix_nu, filler_e, fractions)
+    if not poisson:
+        return modulus, float("nan")
+    _, ratio = self_consistent_elasticity(matrix_e, matrix_nu, filler_e, filler_nu, fractions)
+    return modulus, ratio
+
+
 def _evaluate(
     genome: tuple[int, ...],
     matrices: list[dict],
     fillers: list[dict],
     targets: Targets,
     step: float,
+    regime: str = "dilute",
 ) -> dict:
     m_count = len(matrices)
     blend_units = genome[:m_count]
@@ -240,26 +276,30 @@ def _evaluate(
     filler_eps = [_number(row, "relative_permittivity") for row in active_fillers]
     filler_u = [_uncertainty(row) for row in active_fillers]
 
-    effective_eps = maxwell_garnett_multiphase(matrix["eps"], filler_eps, fractions)
-    effective_e, effective_nu = mori_tanaka_elasticity(
-        matrix["e"], matrix["nu"], filler_e, filler_nu, fractions
+    effective_eps = _effective_permittivity(regime, matrix["eps"], filler_eps, fractions)
+    effective_e, effective_nu = _effective_elasticity(
+        regime, matrix["e"], matrix["nu"], filler_e, filler_nu, fractions
     )
-    soft_e, _ = mori_tanaka_elasticity(
+    soft_e, _ = _effective_elasticity(
+        regime,
         matrix["soft_e"],
         matrix["nu"],
         [value * (1 - uncertainty[0]) for value, uncertainty in zip(filler_e, filler_u, strict=True)],
         filler_nu,
         fractions,
+        poisson=False,
     )
     worst_strain = targets.pressure_max_kpa * 1000 / soft_e
     feasible = worst_strain <= 0.10 + 1e-12
 
-    robust_eps = maxwell_garnett_multiphase(
+    robust_eps = _effective_permittivity(
+        regime,
         matrix["robust_eps"],
         [value * (1 - uncertainty[1]) for value, uncertainty in zip(filler_eps, filler_u, strict=True)],
         fractions,
     )
-    robust_e, robust_nu = mori_tanaka_elasticity(
+    robust_e, robust_nu = _effective_elasticity(
+        regime,
         matrix["stiff_e"],
         matrix["stiff_nu"],
         [value * (1 + uncertainty[0]) for value, uncertainty in zip(filler_e, filler_u, strict=True)],
@@ -386,6 +426,9 @@ def optimize_composites(
         maximum_units=int(round(
             settings.maximum_total_filler_vol_percent / settings.loading_step_vol_percent
         )),
+        minimum_units=int(round(
+            settings.minimum_total_filler_vol_percent / settings.loading_step_vol_percent
+        )),
     )
     population = [_random_genome(rng, limits) for _ in range(settings.population_size)]
     # Seed the bounds for every matrix/filler when the population permits it.
@@ -406,7 +449,8 @@ def optimize_composites(
         for genome in population:
             if genome not in cache:
                 cache[genome] = _evaluate(
-                    genome, matrices, fillers, targets, settings.loading_step_vol_percent
+                    genome, matrices, fillers, targets, settings.loading_step_vol_percent,
+                    settings.loading_regime,
                 )
             evaluations.append(cache[genome])
         evaluations.sort(key=lambda row: row["fitness"], reverse=True)
@@ -489,16 +533,19 @@ def optimize_composites(
                 "screening_ready": "E +/-10%; epsilon_r -10%; Poisson ratio -0.02",
                 "provisional": "E +/-25%; epsilon_r -25%; Poisson ratio -0.05",
                 "constraint": "Worst-case maximum strain using reduced moduli must not exceed 10%",
-                "interpretation": "Engineering stress test, not a statistical confidence interval",
             },
             "matrix_blend_model": (
                 "Only used when more than one matrix is active. Miscible-blend assumption in 10 vol% "
                 "steps of the matrix phase: logarithmic mixing of E and epsilon_r, linear Poisson "
-                "ratio, Voigt/Reuss modulus bounds for the stress test. Not validated against "
-                "measured blends."
+                "ratio, Voigt/Reuss modulus bounds for the stress test."
+            ),
+            "loading_regime": (
+                "Concentrated, 5 to 20 vol% total filler: Bruggeman effective-medium permittivity, "
+                "Lewis-Nielsen Young's modulus, self-consistent effective-medium Poisson ratio"
+                if settings.loading_regime == "concentrated" else
+                "Dilute, below 5 vol% total filler: Maxwell-Garnett permittivity, Mori-Tanaka elasticity"
             ),
             "calculation_mode": "GA evaluated on submission; curves calculated for returned optima",
-            "model_status": "Optimization prediction; experimental validation required",
             "cost_model": False,
         },
     )
@@ -509,6 +556,7 @@ def predict_formulation(
     matrix_percent: dict[str, float],
     filler_vol_percent: dict[str, float],
     targets: Targets,
+    regime: str = "dilute",
 ) -> dict:
     """Nominal model prediction for one formulation, including an unfilled matrix (no fillers)."""
     lookup = {row["material_id"]: row for row in database.material_candidates}
@@ -523,8 +571,8 @@ def predict_formulation(
     filler_e = [_number(row, "youngs_modulus_pa") for row in fillers]
     filler_nu = [_number(row, "poisson_ratio") for row in fillers]
     filler_eps = [_number(row, "relative_permittivity") for row in fillers]
-    eps = maxwell_garnett_multiphase(matrix["eps"], filler_eps, fractions)
-    modulus, poisson = mori_tanaka_elasticity(matrix["e"], matrix["nu"], filler_e, filler_nu, fractions)
+    eps = _effective_permittivity(regime, matrix["eps"], filler_eps, fractions)
+    modulus, poisson = _effective_elasticity(regime, matrix["e"], matrix["nu"], filler_e, filler_nu, fractions)
     strain = targets.pressure_max_kpa * 1000 / modulus
     result = {
         "relative_permittivity": eps,

@@ -129,7 +129,8 @@ def session_chunks(result, database: MaterialDatabase) -> list[Chunk]:
         f"{settings['minimum_active_fillers']} to {settings['maximum_active_fillers']}) scored "
         f"{report['unique_formulations_evaluated']} formulations, of which "
         f"{report['feasible_formulations_evaluated']} stayed under the 10% strain limit. "
-        "Top results: " + " | ".join(lines) + ". These are model predictions, not measurements."
+        f"Filler loading mode: {report.get('loading_regime', 'dilute')}. "
+        "Top results: " + " | ".join(lines) + "."
     )
     best = result.table.iloc[0]
     detail = (

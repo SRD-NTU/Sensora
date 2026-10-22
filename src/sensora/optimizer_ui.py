@@ -24,6 +24,12 @@ from .material_store import MaterialStoreError, add_material, delete_materials
 from .supabase_store import configured_store
 
 
+DILUTE = "Below 5 vol%"
+CONCENTRATED = "5 to 20 vol%"
+CONCENTRATED_SETTINGS = dict(
+    loading_regime="concentrated", minimum_total_filler_vol_percent=5.0,
+    maximum_total_filler_vol_percent=20.0, loading_step_vol_percent=0.5,
+)
 ICON = ROOT / "assets/icon.png"
 LOGO = ROOT / "assets/logo.png"
 
@@ -43,6 +49,12 @@ section[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl'],
 [data-testid='stSidebarNav']{display:none!important}
 [data-testid='stTopNav']{position:absolute;left:50%;transform:translateX(-50%);display:flex;
   justify-content:center;align-items:center}
+[data-testid='stHorizontalBlock']:has([data-testid='stExpander']){align-items:stretch}
+[data-testid='stHorizontalBlock']:has([data-testid='stExpander']) [data-testid='stColumn'],
+[data-testid='stHorizontalBlock']:has([data-testid='stExpander']) [data-testid='stColumn']>[data-testid='stVerticalBlock'],
+[data-testid='stHorizontalBlock']:has([data-testid='stExpander']) [data-testid='stElementContainer'],
+[data-testid='stHorizontalBlock']:has([data-testid='stExpander']) [data-testid='stExpander'],
+[data-testid='stHorizontalBlock']:has([data-testid='stExpander']) [data-testid='stExpander'] details{height:100%}
 h1{letter-spacing:-.035em;margin-bottom:0}
 .sf-tag{color:#52606d;margin:.1rem 0 1.2rem;font-size:1.02rem}
 .sf-hero{background:#167d8d;color:#fff;border-radius:16px;
@@ -332,6 +344,11 @@ def composite_selector(database: MaterialDatabase) -> None:
             format_func=matrix_labels.get,
         )
     with right, st.expander("Filler Details", expanded=True):
+        label_column, option_column = st.columns([1, 2.6], vertical_alignment="center")
+        label_column.markdown("**Filler Loading**")
+        loading = option_column.radio(
+            "Filler Loading", [DILUTE, CONCENTRATED], horizontal=True, label_visibility="collapsed"
+        )
         filler_range = _count_range("Filler Count", (1, 4))
         selected_fillers = st.multiselect(
             "Allowed Fillers", list(filler_labels), default=list(filler_labels),
@@ -344,6 +361,7 @@ def composite_selector(database: MaterialDatabase) -> None:
         population_size=int(population_size), generations=int(generation_count),
         minimum_active_matrices=matrix_range[0], maximum_active_matrices=matrix_range[1],
         minimum_active_fillers=filler_range[0], maximum_active_fillers=filler_range[1],
+        **(CONCENTRATED_SETTINGS if loading == CONCENTRATED else {}),
     )
     signature = json.dumps({
         "database": database.fingerprint(), "selected": selected, "targets": asdict(targets),

@@ -174,3 +174,117 @@ def planar_capacitance_response(
     thickness_factor = 1 / (1 - strain)
     area_factor = 1.0 if boundary == "fixed_area" else (1 + float(poisson_ratio) * strain) ** 2
     return area_factor * thickness_factor - 1
+
+
+def bruggeman_permittivity(
+    matrix_permittivity: float,
+    filler_permittivities: Sequence[float],
+    filler_volume_fractions: Sequence[float],
+) -> float:
+    """Bruggeman symmetric effective-medium permittivity for spherical inclusions.
+
+    Solves ``sum_k phi_k (eps_k - eps) / (eps_k + 2 eps) = 0`` over the matrix and every
+    filler. The left side falls steadily with ``eps``, so bisection finds the single root.
+    """
+    matrix_permittivity = _positive_finite(matrix_permittivity, "Matrix permittivity")
+    fillers = np.asarray(filler_permittivities, dtype=float)
+    fractions = _volume_fractions(filler_volume_fractions)
+    if fillers.ndim != 1 or len(fillers) != len(fractions) or not np.isfinite(fillers).all():
+        raise ValueError("Filler permittivities and fractions must be finite and have equal length.")
+    if (fillers <= 0).any():
+        raise ValueError("Filler permittivities must be positive.")
+    values = np.concatenate(([matrix_permittivity], fillers))
+    shares = np.concatenate(([1 - fractions.sum()], fractions))
+
+    def residual(eps: float) -> float:
+        return float(np.sum(shares * (values - eps) / (values + 2 * eps)))
+
+    low, high = float(values.min()), float(values.max())
+    if low == high:
+        return low
+    for _ in range(200):
+        middle = 0.5 * (low + high)
+        if residual(middle) > 0:
+            low = middle
+        else:
+            high = middle
+        if high - low <= 1e-12 * high:
+            break
+    return 0.5 * (low + high)
+
+
+def lewis_nielsen_modulus(
+    matrix_youngs_modulus_pa: float,
+    matrix_poisson_ratio: float,
+    filler_youngs_moduli_pa: Sequence[float],
+    filler_volume_fractions: Sequence[float],
+    *,
+    maximum_packing: float = 0.637,
+) -> float:
+    """Lewis-Nielsen effective modulus of a matrix with spherical filler particles.
+
+    ``E/E_m = (1 + A B phi) / (1 - B psi phi)`` with ``B = (E_f/E_m - 1)/(E_f/E_m + A)`` and
+    ``psi = 1 + (1 - phi_max) phi / phi_max**2``. The shape factor ``A`` is Nielsen's value for
+    spheres, ``(7 - 5 nu) / (8 - 10 nu)``. The model has one filler, so several fillers are
+    treated as one filler with their volume-weighted modulus.
+    """
+    matrix_modulus = _positive_finite(matrix_youngs_modulus_pa, "Matrix Young's modulus")
+    fillers = np.asarray(filler_youngs_moduli_pa, dtype=float)
+    fractions = _volume_fractions(filler_volume_fractions)
+    if fillers.ndim != 1 or len(fillers) != len(fractions) or not np.isfinite(fillers).all() or (fillers <= 0).any():
+        raise ValueError("Filler moduli must be positive and match the volume fractions.")
+    nu = float(matrix_poisson_ratio)
+    if not np.isfinite(nu) or not -1 < nu < 0.5:
+        raise ValueError("Poisson ratio must lie strictly between -1 and 0.5.")
+    if not 0 < maximum_packing <= 1:
+        raise ValueError("Maximum packing fraction must lie between zero and one.")
+    phi = float(fractions.sum())
+    if phi == 0:
+        return matrix_modulus
+    if phi >= maximum_packing:
+        raise ValueError("Total filler fraction must be below the maximum packing fraction.")
+    filler_modulus = float(np.dot(fractions, fillers) / phi)
+    shape = (7 - 5 * nu) / (8 - 10 * nu)
+    ratio = filler_modulus / matrix_modulus
+    b = (ratio - 1) / (ratio + shape)
+    psi = 1 + (1 - maximum_packing) / maximum_packing**2 * phi
+    denominator = 1 - b * psi * phi
+    if denominator <= 0:
+        raise ValueError("The Lewis-Nielsen denominator is not positive for this composition.")
+    return float(matrix_modulus * (1 + shape * b * phi) / denominator)
+
+
+def self_consistent_elasticity(
+    matrix_youngs_modulus_pa: float,
+    matrix_poisson_ratio: float,
+    filler_youngs_moduli_pa: Sequence[float],
+    filler_poisson_ratios: Sequence[float],
+    filler_volume_fractions: Sequence[float],
+) -> tuple[float, float]:
+    """Self-consistent (Budiansky-Hill) effective medium for spherical inclusions.
+
+    The matrix and every filler sit in the effective medium itself, which is the elastic
+    counterpart of the Bruggeman scheme. Returns the effective Young's modulus and Poisson ratio.
+    """
+    fractions = _volume_fractions(filler_volume_fractions)
+    youngs = np.asarray(filler_youngs_moduli_pa, dtype=float)
+    poisson = np.asarray(filler_poisson_ratios, dtype=float)
+    if youngs.ndim != 1 or poisson.ndim != 1 or not (len(youngs) == len(poisson) == len(fractions)):
+        raise ValueError("Filler elastic-property arrays and fractions must have equal length.")
+    moduli = [bulk_shear_from_young_poisson(matrix_youngs_modulus_pa, matrix_poisson_ratio)]
+    moduli += [bulk_shear_from_young_poisson(e, nu) for e, nu in zip(youngs, poisson, strict=True)]
+    bulk = np.asarray([item[0] for item in moduli])
+    shear = np.asarray([item[1] for item in moduli])
+    shares = np.concatenate(([1 - fractions.sum()], fractions))
+    k, g = float(np.dot(shares, bulk)), float(np.dot(shares, shear))      # Voigt start
+    for _ in range(5000):
+        k_new = float(np.sum(shares * bulk / (bulk + 4 * g / 3)) / np.sum(shares / (bulk + 4 * g / 3)))
+        gamma = g * (9 * k_new + 8 * g) / (6 * (k_new + 2 * g))
+        g_new = float(np.sum(shares * shear / (shear + gamma)) / np.sum(shares / (shear + gamma)))
+        if abs(k_new - k) <= 1e-12 * k and abs(g_new - g) <= 1e-12 * g:
+            k, g = k_new, g_new
+            break
+        k, g = 0.5 * (k + k_new), 0.5 * (g + g_new)
+    else:
+        raise ValueError("The self-consistent elasticity iteration did not converge.")
+    return young_poisson_from_bulk_shear(k, g)

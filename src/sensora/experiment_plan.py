@@ -70,9 +70,10 @@ def build_experiment_plan(
             {key: round(vol * share, 3) for key, vol in best_fillers.items()},
         ))
 
+    regime = result.report.get("settings", {}).get("loading_regime", "dilute")
     rows = []
     for index, (purpose, matrix, fillers) in enumerate(samples, start=1):
-        prediction = predict_formulation(database, matrix, fillers, targets)
+        prediction = predict_formulation(database, matrix, fillers, targets, regime)
         rows.append({
             "experiment_id": f"E{index:02d}",
             "purpose": purpose,
