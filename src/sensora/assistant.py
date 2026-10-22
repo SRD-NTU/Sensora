@@ -34,6 +34,8 @@ MODELS = (
               "Qwen3-4B-Instruct-2507-Q4_K_M.gguf", 2.5, "Better answers, slower"),
     ModelSpec("Qwen2.5 1.5B Instruct", "Qwen/Qwen2.5-1.5B-Instruct-GGUF",
               "qwen2.5-1.5b-instruct-q4_k_m.gguf", 1.1, "Faster, weaker reasoning"),
+    ModelSpec("SmolLM2 360M Instruct", "HuggingFaceTB/SmolLM2-360M-Instruct-GGUF",
+              "smollm2-360m-instruct-q8_0.gguf", 0.4, "Fastest, least reliable"),
 )
 TOP_K = 5
 PROMPT_CHARS = 650

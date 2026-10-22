@@ -90,8 +90,14 @@ def _model_controls() -> tuple[ModelSpec | None, object]:
             "No language model is installed, so answers show the most relevant passages instead. "
             "Download one to get written explanations."
         )
-        for spec in MODELS:
-            if st.button(f"Download {spec.label} ({spec.size_gb:g} GB)", key=f"download_{spec.file}"):
+        st.markdown(
+            "<style>[class*='st-key-download_'] button{white-space:nowrap}</style>",
+            unsafe_allow_html=True,
+        )
+        for column, spec in zip(st.columns(len(MODELS)), MODELS):
+            if column.button(
+                f"Download {spec.label} ({spec.size_gb:g} GB)", key=f"download_{spec.file}", width="stretch"
+            ):
                 with st.spinner(f"Downloading {spec.label}…"):
                     download_model(spec)
                 st.rerun()
