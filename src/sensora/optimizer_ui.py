@@ -57,7 +57,7 @@ section[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl'],
 [data-testid='stHorizontalBlock']:has([data-testid='stExpander']) [data-testid='stExpander'] details{height:100%}
 h1{letter-spacing:-.035em;margin-bottom:0}
 .sf-tag{color:#52606d;margin:.1rem 0 1.2rem;font-size:1.02rem}
-.sf-hero{background:#167d8d;color:#fff;border-radius:16px;
+.sf-hero{background:linear-gradient(120deg,#0f2a43 0%,#167d8d 100%);color:#fff;border-radius:16px;
   padding:1.1rem 1.4rem;margin:.4rem 0 1rem}
 .sf-hero small{opacity:.8;letter-spacing:.08em;text-transform:uppercase;font-size:.72rem}
 .sf-hero div{font-size:1.45rem;font-weight:650;letter-spacing:-.02em;margin-top:.15rem}
