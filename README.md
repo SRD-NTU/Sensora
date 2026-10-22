@@ -26,10 +26,6 @@ streamlit run app.py
 
 Open http://localhost:8501 in your browser.
 
-The app requires Supabase for material storage. Configure `SUPABASE_URL` and
-`SUPABASE_SECRET_KEY` as described in [supabase/README.md](supabase/README.md).
-The AI Assistant page can download a small language model from within the app.
-
 
 ## Motivation and Problem Statement
 Imagine building a robotic hand that can sense how firmly it holds an object, a wearable device that monitors subtle body movements, or a sensor that detects pressure changes in a structure. In all these applications, the sensing layer plays a crucial role. But designing one is not as simple as choosing a material and making a sensor. A researcher looking for a suitable dielectric layer faces hundreds of possible polymers, fillers, and material combinations reported across the literature. Some promise excellent sensitivity but require complicated fabrication techniques, expensive materials, or specialized equipment. Others may be easier to fabricate but perform poorly within the required pressure range. The challenge is even greater for researchers outside materials science. Why should someone developing a robotic system have to spend months experimenting with dielectric composites just to build a pressure sensor that meets their needs? More importantly, with so much existing knowledge about these materials, can we use it to make sensor design more accessible, predictable, and less dependent on trial and error? 
