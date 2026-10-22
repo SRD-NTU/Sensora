@@ -16,6 +16,7 @@ from .composite_optimization import (
     GeneticOptimizationSettings,
     optimize_composites,
 )
+from .assistant_ui import assistant_page
 from .config import ROOT
 from .experiment_plan import build_experiment_plan
 from .database import MaterialDatabase, read_database
@@ -488,5 +489,6 @@ def run() -> None:
         st.Page(lambda: optimizer_page(database), title="Composite Optimizer",
                 url_path="optimizer", default=True),
         st.Page(lambda: materials_page(database), title="Database", url_path="database"),
+        st.Page(lambda: assistant_page(database), title="AI Assistant", url_path="assistant"),
     ]
     st.navigation(pages, position="top").run()
