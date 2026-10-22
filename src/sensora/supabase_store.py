@@ -101,8 +101,8 @@ class SupabaseStore:
         return {"materials": count}
 
 
-def configured_store() -> SupabaseStore | None:
-    """Use Supabase when configured; incomplete configuration never falls back to SQLite."""
+def configured_store() -> SupabaseStore:
+    """Return the required Supabase store or explain what is missing."""
     values = {key: os.environ.get(key, "").strip() for key in ("SUPABASE_URL", "SUPABASE_SECRET_KEY")}
     secrets_path = ROOT / ".streamlit/secrets.toml"
     if not all(values.values()) and secrets_path.is_file():
@@ -115,7 +115,7 @@ def configured_store() -> SupabaseStore | None:
             if not values[key]:
                 values[key] = str(secrets.get(key, "")).strip()
     if not any(values.values()):
-        return None
+        raise SupabaseError("Set SUPABASE_URL and SUPABASE_SECRET_KEY in the server secrets.")
     if not all(values.values()):
         raise SupabaseError("Set both SUPABASE_URL and SUPABASE_SECRET_KEY in the server secrets.")
     url = values["SUPABASE_URL"].rstrip("/")

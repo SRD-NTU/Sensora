@@ -4,7 +4,6 @@ import io
 import json
 import os
 from pathlib import Path
-import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -14,7 +13,6 @@ from urllib.parse import parse_qs, urlsplit
 from sensora import database, material_store
 from sensora.supabase_store import SupabaseError, SupabaseStore, configured_store
 
-ROOT = Path(__file__).resolve().parents[1]
 URL = "https://test-project.supabase.co"
 KEY = "sb_secret_test_fixture_only"
 VALUES = dict(name="Test polymer", youngs_modulus_pa=100000, poisson_ratio=0.3,
@@ -38,8 +36,9 @@ class ConfigurationTests(unittest.TestCase):
         env_patch.start()
         self.addCleanup(env_patch.stop)
 
-    def test_absent_configuration_keeps_sqlite(self):
-        self.assertIsNone(configured_store())
+    def test_absent_configuration_is_an_error(self):
+        with self.assertRaisesRegex(SupabaseError, "SUPABASE_URL and SUPABASE_SECRET_KEY"):
+            database.read_database()
 
     def test_partial_configuration_does_not_fall_back(self):
         os.environ["SUPABASE_URL"] = URL
@@ -114,16 +113,14 @@ class ApiTests(unittest.TestCase):
 
 
 class StorageRoutingTests(unittest.TestCase):
-    def test_remote_failures_never_mutate_sqlite(self):
+    def test_remote_failures_are_reported(self):
         remote = SupabaseStore(URL, KEY)
         with patch("sensora.material_store.configured_store", return_value=remote), \
-                patch.object(SupabaseStore, "request", side_effect=SupabaseError("Offline")), \
-                patch("sensora.material_store.sqlite3.connect") as local:
+                patch.object(SupabaseStore, "request", side_effect=SupabaseError("Offline")):
             for action in [lambda: material_store.add_material("matrix", VALUES),
                            lambda: material_store.delete_materials(["M001"])]:
                 with self.assertRaisesRegex(material_store.MaterialStoreError, "Offline"):
                     action()
-            local.assert_not_called()
 
     def test_remote_insert_validates_fields_before_sending(self):
         with patch("sensora.material_store.configured_store") as remote:
@@ -133,18 +130,19 @@ class StorageRoutingTests(unittest.TestCase):
                     material_store.add_material("matrix", {**VALUES, key: value})
             remote.assert_not_called()
 
-    def test_explicit_sqlite_path_keeps_existing_add_delete_backup_behavior(self):
-        with tempfile.TemporaryDirectory() as folder, \
-                patch("sensora.material_store.configured_store", side_effect=AssertionError("Unexpected remote access")):
-            path = Path(folder) / "materials.sqlite3"
-            shutil.copy2(ROOT / "data/materials.sqlite3", path)
-            before = database.read_database(path)
-            material_id = material_store.add_material("matrix", VALUES, path=path)
-            after = database.read_database(path)
-            self.assertEqual(len(after.material_candidates), len(before.material_candidates) + 1)
-            self.assertEqual(material_store.delete_materials([material_id], path=path), {"materials": 1})
-            self.assertEqual(database.read_database(path).fingerprint(), before.fingerprint())
-            self.assertEqual(len(list((Path(folder) / "backups").glob("*.sqlite3"))), 2)
+    def test_reads_and_writes_use_supabase(self):
+        remote = SupabaseStore(URL, KEY)
+        with patch("sensora.database.configured_store", return_value=remote), \
+                patch("sensora.material_store.configured_store", return_value=remote), \
+                patch.object(SupabaseStore, "read_records", return_value=[{"material_id": "M001"}]) as read, \
+                patch.object(SupabaseStore, "add_record", return_value="M011") as add, \
+                patch.object(SupabaseStore, "delete_records", return_value={"materials": 1}) as delete:
+            self.assertEqual(database.read_database().material_candidates, [{"material_id": "M001"}])
+            self.assertEqual(material_store.add_material("matrix", VALUES), "M011")
+            self.assertEqual(material_store.delete_materials(["M011"]), {"materials": 1})
+            read.assert_called_once_with()
+            add.assert_called_once()
+            delete.assert_called_once_with(["M011"])
 
 
 if __name__ == "__main__":

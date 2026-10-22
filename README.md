@@ -26,5 +26,6 @@ streamlit run app.py
 
 Open http://localhost:8501 in your browser.
 
-The app uses the bundled `data/materials.sqlite3` by default, so no further setup is needed.
+The app requires Supabase for material storage. Configure `SUPABASE_URL` and
+`SUPABASE_SECRET_KEY` as described in [supabase/README.md](supabase/README.md).
 The AI Assistant page can download a small language model from within the app.

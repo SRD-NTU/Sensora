@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from dataclasses import asdict
 import json
-import sqlite3
 
 import numpy as np
 import pandas as pd
@@ -21,7 +20,7 @@ from .config import ROOT
 from .experiment_plan import build_experiment_plan
 from .database import MaterialDatabase, read_database
 from .material_store import MaterialStoreError, add_material, delete_materials
-from .supabase_store import configured_store
+from .supabase_store import SupabaseError
 
 
 DILUTE = "Below 5 vol%"
@@ -427,9 +426,13 @@ def _material_section(database: MaterialDatabase, role: str, heading: str, singu
     event = st.dataframe(
         _material_frame(rows, _TABLE_COLUMNS),
         hide_index=True, width="stretch", column_config=_COLUMN_CONFIG,
-        on_select="rerun", selection_mode="multi-row", key=f"select_{role}",
+        on_select="rerun", selection_mode="multi-row",
+        key=f"select_{role}_{database.fingerprint()}",
     )
-    chosen = [rows[index]["material_id"] for index in event.selection.rows]
+    chosen = [
+        rows[index]["material_id"] for index in event.selection.rows
+        if isinstance(index, int) and 0 <= index < len(rows)
+    ]
     if st.button(f"Delete Selected ({len(chosen)})", key=f"delete_{role}", disabled=not chosen):
         try:
             counts = delete_materials(chosen)
@@ -473,10 +476,7 @@ def database_page(database: MaterialDatabase) -> None:
         st.success(message)
     _material_section(database, "matrix", "Available Matrices", "Matrix")
     _material_section(database, "filler", "Available Fillers", "Filler")
-    if configured_store() is not None:
-        st.caption("Materials are stored in Supabase. Additions and deletions are saved in the change history.")
-    else:
-        st.caption("New records get the next free ID. A backup of the database is saved before every change.")
+    st.caption("Materials are stored in Supabase. Additions and deletions are saved in the change history.")
 
 
 def optimizer_page(database: MaterialDatabase) -> None:
@@ -511,7 +511,7 @@ def run() -> None:
     st.logo(str(LOGO), size="large")
     try:
         database = read_database()
-    except (ValueError, sqlite3.Error) as exc:
+    except SupabaseError as exc:
         st.error(str(exc))
         return
     pages = [

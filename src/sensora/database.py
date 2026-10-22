@@ -1,22 +1,11 @@
-"""Read matrix and filler records from Supabase, or a local SQLite database."""
+"""Read matrix and filler records from Supabase."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from hashlib import sha256
 import json
-from pathlib import Path
-import sqlite3
 
-from .config import ROOT
 from .supabase_store import configured_store
-
-DEFAULT_DB = ROOT / "data/materials.sqlite3"
-
-SCHEMA = (
-    "CREATE TABLE IF NOT EXISTS material_candidates ("
-    "material_id TEXT PRIMARY KEY, role TEXT NOT NULL CHECK(role IN ('matrix', 'filler')), "
-    "name TEXT NOT NULL, record_json TEXT NOT NULL)"
-)
 
 
 @dataclass(frozen=True)
@@ -28,14 +17,5 @@ class MaterialDatabase:
         return sha256(payload.encode()).hexdigest()
 
 
-def read_database(path: Path | None = None) -> MaterialDatabase:
-    if path is None and (store := configured_store()) is not None:
-        return MaterialDatabase(material_candidates=store.read_records())
-    path = Path(path or DEFAULT_DB).resolve()
-    if not path.is_file():
-        raise ValueError("The materials database is not installed.")
-    with sqlite3.connect(path.as_uri() + "?mode=ro", uri=True) as connection:
-        rows = connection.execute(
-            "SELECT record_json FROM material_candidates ORDER BY material_id"
-        ).fetchall()
-    return MaterialDatabase(material_candidates=[json.loads(row[0]) for row in rows])
+def read_database() -> MaterialDatabase:
+    return MaterialDatabase(material_candidates=configured_store().read_records())

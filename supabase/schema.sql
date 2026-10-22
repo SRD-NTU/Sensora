@@ -1,4 +1,4 @@
--- Used by scripts/prepare_supabase.py to build the one-time setup file.
+-- Supabase schema for Sensora materials.
 -- Only the server's service_role can access Sensora records or write functions.
 create table if not exists public.material_candidates (
     material_id text primary key,
@@ -128,4 +128,3 @@ revoke all on function public.sensora_add_material(jsonb) from public, anon, aut
 revoke all on function public.sensora_delete_materials(text[]) from public, anon, authenticated;
 grant execute on function public.sensora_add_material(jsonb) to service_role;
 grant execute on function public.sensora_delete_materials(text[]) to service_role;
-
