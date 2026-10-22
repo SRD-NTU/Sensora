@@ -20,6 +20,7 @@ from .config import ROOT
 from .experiment_plan import build_experiment_plan
 from .database import MaterialDatabase, read_database
 from .material_store import MaterialStoreError, add_material, delete_materials
+from .supabase_store import configured_store
 
 
 ICON = ROOT / "assets/icon.png"
@@ -43,7 +44,7 @@ section[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl'],
   justify-content:center;align-items:center}
 h1{letter-spacing:-.035em;margin-bottom:0}
 .sf-tag{color:#52606d;margin:.1rem 0 1.2rem;font-size:1.02rem}
-.sf-hero{background:linear-gradient(120deg,#0f2a43 0%,#167d8d 100%);color:#fff;border-radius:16px;
+.sf-hero{background:#167d8d;color:#fff;border-radius:16px;
   padding:1.1rem 1.4rem;margin:.4rem 0 1rem}
 .sf-hero small{opacity:.8;letter-spacing:.08em;text-transform:uppercase;font-size:.72rem}
 .sf-hero div{font-size:1.45rem;font-weight:650;letter-spacing:-.02em;margin-top:.15rem}
@@ -292,13 +293,8 @@ def show_composite_results(
                 "replicates": "Batches",
             },
         )
-        with st.expander("Measurement Protocol", expanded=True):
-            st.markdown(plan.protocol)
-        p1, p2 = st.columns(2)
-        p1.download_button("Experiment Table (CSV)", plan.table.to_csv(index=False),
+        st.download_button("Experiment Table (CSV)", plan.table.to_csv(index=False),
                            "experiment_plan.csv", "text/csv", width="stretch")
-        p2.download_button("Protocol (Markdown)", plan.protocol,
-                           "validation_protocol.md", "text/markdown", width="stretch")
 
     d1, d2, d3 = st.columns(3)
     d1.download_button("Ranked Formulations (CSV)", result.table.to_csv(index=False),
@@ -388,6 +384,8 @@ _COLUMN_CONFIG = {
 
 def _material_frame(rows: list[dict], columns: list[str]) -> pd.DataFrame:
     """Material records for display, with Young's modulus converted from Pa to kPa."""
+    if not rows:
+        return _pretty_columns(pd.DataFrame(columns=columns))
     frame = pd.DataFrame(rows)
     frame["youngs_modulus_kpa"] = frame["youngs_modulus_pa"].astype(float) / 1000
     return _pretty_columns(frame[columns])
@@ -445,9 +443,10 @@ def database_page(database: MaterialDatabase) -> None:
         st.success(message)
     _material_section(database, "matrix", "Available Matrices", "Matrix")
     _material_section(database, "filler", "Available Fillers", "Filler")
-    st.caption(
-        "New records get the next free ID. A backup of the database is saved before every change."
-    )
+    if configured_store() is not None:
+        st.caption("Materials are stored in Supabase. Additions and deletions are saved in the change history.")
+    else:
+        st.caption("New records get the next free ID. A backup of the database is saved before every change.")
 
 
 def optimizer_page(database: MaterialDatabase) -> None:
@@ -457,6 +456,10 @@ def optimizer_page(database: MaterialDatabase) -> None:
         "sensitivity over your pressure range.</div>",
         unsafe_allow_html=True,
     )
+    roles = {row["role"] for row in database.material_candidates}
+    if not {"matrix", "filler"} <= roles:
+        st.info("Add at least one matrix and one filler in the Database tab to start optimizing.")
+        return
     composite_selector(database)
 
 

@@ -1,7 +1,7 @@
 """Add and delete matrix and filler records in the application database.
 
-Records are never edited in place. Every write is one transaction and is preceded by a
-timestamped backup of the database file.
+Records are never edited in place. Supabase writes are transactional and recorded in
+the database change history. Local writes are preceded by a timestamped SQLite backup.
 """
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ import re
 import sqlite3
 
 from . import database
+from .supabase_store import SupabaseError, configured_store
 
 PREFIX = {"matrix": "M", "filler": "F"}
 NUMERIC = {
@@ -36,10 +37,9 @@ def next_material_id(role: str, path: Path | None = None) -> str:
     if role not in PREFIX:
         raise MaterialStoreError("Role must be 'matrix' or 'filler'.")
     prefix = PREFIX[role]
-    with sqlite3.connect(_path(path).as_uri() + "?mode=ro", uri=True) as connection:
-        ids = [row[0] for row in connection.execute(
-            "SELECT material_id FROM material_candidates WHERE role = ?", (role,)
-        )]
+    # Supabase inserts allocate their ID atomically inside the database function.
+    ids = [row["material_id"] for row in database.read_database(path).material_candidates
+           if row["role"] == role]
     numbers = [int(m.group(1)) for value in ids if (m := re.fullmatch(rf"{prefix}(\d+)", value))]
     return f"{prefix}{max(numbers, default=0) + 1:03d}"
 
@@ -65,7 +65,8 @@ def add_material(
     backup_dir: Path | None = None,
 ) -> str:
     """Insert one matrix or filler with an automatically assigned ID and return that ID."""
-    path = _path(path)
+    if role not in PREFIX:
+        raise MaterialStoreError("Role must be 'matrix' or 'filler'.")
     name = str(values.get("name") or "").strip()
     if not name:
         raise MaterialStoreError("Name is required.")
@@ -80,9 +81,7 @@ def add_material(
             raise MaterialStoreError(f"{label} must be {bound}.")
         numbers[key] = number
 
-    material_id = next_material_id(role, path)
     record = {
-        "material_id": material_id,
         "name": name,
         "role": role,
         "formulation_or_phase": str(values.get("formulation_or_phase") or "").strip(),
@@ -90,6 +89,14 @@ def add_material(
         "evidence_status": "provisional",
         "limitations": str(values.get("limitations") or "").strip(),
     }
+    try:
+        if path is None and (store := configured_store()) is not None:
+            return store.add_record(record)
+    except SupabaseError as exc:
+        raise MaterialStoreError(str(exc)) from None
+    path = _path(path)
+    material_id = next_material_id(role, path)
+    record["material_id"] = material_id
     _backup(path, backup_dir)
     connection = sqlite3.connect(path)
     try:
@@ -116,10 +123,15 @@ def delete_materials(
     backup_dir: Path | None = None,
 ) -> dict[str, int]:
     """Delete materials by ID."""
-    path = _path(path)
     ids = sorted(set(material_ids))
     if not ids:
         raise MaterialStoreError("Select at least one material to delete.")
+    try:
+        if path is None and (store := configured_store()) is not None:
+            return store.delete_records(ids)
+    except SupabaseError as exc:
+        raise MaterialStoreError(str(exc)) from None
+    path = _path(path)
     marks = ", ".join("?" for _ in ids)
     _backup(path, backup_dir)
     connection = sqlite3.connect(path)

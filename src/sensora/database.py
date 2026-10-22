@@ -1,4 +1,4 @@
-"""SQLite storage for the matrix and filler records."""
+"""Read matrix and filler records from Supabase, or a local SQLite database."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -8,6 +8,7 @@ from pathlib import Path
 import sqlite3
 
 from .config import ROOT
+from .supabase_store import configured_store
 
 DEFAULT_DB = ROOT / "data/materials.sqlite3"
 
@@ -28,6 +29,8 @@ class MaterialDatabase:
 
 
 def read_database(path: Path | None = None) -> MaterialDatabase:
+    if path is None and (store := configured_store()) is not None:
+        return MaterialDatabase(material_candidates=store.read_records())
     path = Path(path or DEFAULT_DB).resolve()
     if not path.is_file():
         raise ValueError("The materials database is not installed.")
