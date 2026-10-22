@@ -47,7 +47,7 @@ CSS = """
 section[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl'],
 [data-testid='stExpandSidebarButton'],[data-testid='stSidebarCollapseButton'],
 [data-testid='stSidebarNav']{display:none!important}
-@media (min-width:769px){
+@media (min-width:768px){
   [data-testid='stTopNav']{position:absolute;left:50%;transform:translateX(-50%);display:flex;
     justify-content:center;align-items:center}
 }
@@ -58,7 +58,11 @@ section[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl'],
 [data-testid='stHorizontalBlock']:has([data-testid='stExpander']) [data-testid='stExpander'],
 [data-testid='stHorizontalBlock']:has([data-testid='stExpander']) [data-testid='stExpander'] details{height:100%}
 .st-key-mobile_nav{display:none}
-@media (max-width:768px){.st-key-mobile_nav{display:block}}
+@media (max-width:767px){
+  .block-container{padding-top:5rem}
+  .st-key-mobile_nav{display:block;position:fixed;top:4rem;left:1rem;
+    width:auto;z-index:100000}
+}
 h1{letter-spacing:-.035em;margin-bottom:0}
 .sf-tag{color:#52606d;margin:.1rem 0 1.2rem;font-size:1.02rem}
 .sf-hero{background:linear-gradient(120deg,#0f2a43 0%,#167d8d 100%);color:#fff;border-radius:16px;
@@ -517,8 +521,9 @@ def run() -> None:
         st.Page(lambda: assistant_page(database), title="AI Assistant", url_path="assistant"),
     ]
     current = st.navigation(pages, position="top")
-    # The top nav is not shown on narrow screens, so offer the same links there.
+    # Streamlit hides top navigation on narrow screens. Provide a compact menu there.
     with st.container(key="mobile_nav"):
-        for column, page in zip(st.columns(len(pages)), pages):
-            column.page_link(page)
+        with st.popover("Menu", icon=":material/menu:"):
+            for page in pages:
+                st.page_link(page, use_container_width=True)
     current.run()
