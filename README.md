@@ -34,31 +34,6 @@ This is the idea behind Sensora, an AI-powered platform that helps researchers d
 ## Framework
 Instead of starting with a long literature search and repeated experiments, users can select available polymers, such as PDMS or Ecoflex, choose suitable dielectric fillers, define their acceptable filler concentrations, and specify the pressure range in which their sensor should operate. Behind the scenes, Sensora combines a materials database with physics-based models that estimate how different compositions affect dielectric properties and mechanical compliance. A genetic algorithm then explores possible formulations and identifies promising combinations that could deliver higher pressure sensitivity within the user's constraints. The platform also shows predicted sensing responses and material properties, allowing users to understand the trade-offs before moving to fabrication. Sensora is not intended to replace experiments. It is designed to make the experiments smarter.
 
-## Genetic Algorithm Based Design of Materials for Capacitive Pressure Sensors
-
-A genetic algorithm (GA) is a population-based optimization method that evolves candidate solutions (chromosomes) through fitness-based selection, crossover, and mutation. In Sensora, each chromosome encodes the polymer-matrix composition, filler identities, and their volume fractions. Regime-specific physics models estimate the effective dielectric and elastic properties of each candidate, while a planar-capacitor model predicts its pressure-dependent response. The GA iteratively optimizes these formulations over successive generations based on their predicted performance and feasibility constraints. The optimization problem is formulated as follows:
-
-
-$$
-\max_{\mathbf{x}} F(\mathbf{x})
-=
-\varepsilon_{r,\mathrm{rob}}(\mathbf{x})
-\frac{
-r_{\mathrm{rob}}(P_{\max};\mathbf{x})
--
-r_{\mathrm{rob}}(P_{\min};\mathbf{x})
-}{
-P_{\max}-P_{\min}
-},
-\qquad
-\text{subject to}
-\qquad
-\frac{1000P_{\max}}{E_{\mathrm{soft}}(\mathbf{x})}
-\leq 0.10
-$$
-
-Where $r_{rob}$ is its conservative normalized capacitance response, pressures P are in kPa, and $E_{soft}$ is in Pa. Starting from random candidates, the GA retains strong solutions, selects parents by tournament, recombines and mutates their genes, and repairs invalid compositions.  Formulations that exceed the 10% strain limit receive a large negative fitness, so only feasible designs appear in the final ranking.
-
 ## Key Contribution
 Sensora Web Application. The app is hosted [here](https://sensora-web.streamlit.app/) and features three components. 
 
