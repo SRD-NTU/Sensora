@@ -2,7 +2,7 @@
 
 ## Run Online
 
-Sensora is hosted on Streamlit Community Cloud: https://sens0ra.streamlit.app
+Sensora is hosted on Streamlit Community Cloud: [https://sens0ra.streamlit.app](https://sensora-web.streamlit.app/)
 
 You give it a pressure range, and it searches for the soft polymer matrix, ceramic fillers and
 loadings that give a capacitive pressure sensor the highest robust capacitance sensitivity over
