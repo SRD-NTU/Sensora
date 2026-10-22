@@ -64,6 +64,7 @@ h1{letter-spacing:-.035em;margin-bottom:0}
 .sf-hero span{opacity:.85;font-size:.92rem}
 div[data-testid='stMetric']{background:#fff;padding:.8rem 1rem;border-radius:12px;border:1px solid #e2e8ef}
 div[data-testid='stSliderThumbValue']{display:none}
+.sf-hint{color:#167d8d;font-size:.78rem;line-height:1.25;margin:0 0 .35rem}
 div[data-testid='stMetricValue']{font-size:1.5rem}
 </style>
 """
@@ -332,10 +333,12 @@ def composite_selector(database: MaterialDatabase) -> None:
         p1, p2 = st.columns(2)
         pmin = p1.number_input("Minimum Pressure (kPa)", min_value=0.0, value=0.0)
         pmax = p2.number_input("Maximum Pressure (kPa)", min_value=0.001, value=10.0)
-    with st.expander("GA Properties", expanded=False):
+    with st.expander("Genetic Algorithm (GA) Properties", expanded=False):
         g1, g2 = st.columns(2)
         population_size = g1.number_input("GA Population Size", min_value=2, max_value=200, value=20, step=1)
+        g1.markdown("<div class='sf-hint'>Candidate formulations tested in each round.</div>", unsafe_allow_html=True)
         generation_count = g2.number_input("GA Iteration Count", min_value=10, max_value=300, value=50, step=1)
+        g2.markdown("<div class='sf-hint'>Rounds of selection and mutation; more rounds refine the result.</div>", unsafe_allow_html=True)
     left, right = st.columns(2)
     with left, st.expander("Matrix Details", expanded=True):
         matrix_range = _count_range("Matrix Count", (1, 1))
